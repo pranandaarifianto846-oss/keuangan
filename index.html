@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistem Keuangan Cloud Real-Time</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- SDK Firebase Cloud Database (Compat Version) -->
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+</head>
+<body class="bg-slate-50 text-slate-800 font-sans min-h-screen">
+
+    <div class="max-w-5xl mx-auto p-4 sm:p-6 space-y-6">
+        <!-- Header -->
+        <header class="flex flex-col sm:flex-row justify-between items-start sm:items-center pb-4 border-b border-slate-200 gap-4">
+            <div>
+                <h1 class="text-2xl sm:text-3xl font-bold text-slate-900 flex items-center gap-2">
+                    <i class="fa-solid fa-cloud text-emerald-600"></i> Catatan Keuangan Cloud
+                </h1>
+                <div class="flex items-center gap-2 mt-1">
+                    <span class="inline-block w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                    <p class="text-xs text-slate-500" id="statusDb">Terhubung ke Cloud Database</p>
+                </div>
+            </div>
+            <!-- Filter Periode Bulan -->
+            <div class="flex items-center gap-2 bg-white px-3 py-2 rounded-xl shadow-sm border border-slate-200">
+                <span class="text-xs font-semibold text-slate-500">Periode:</span>
+                <input type="month" id="filterBulan" class="bg-transparent text-sm font-semibold outline-none text-slate-700 cursor-pointer" onchange="renderApp()">
+            </div>
+        </header>
+
+        <!-- Kartu Ringkasan (Cards) -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <!-- 1. Saldo Akumulasi (TETAP / PERMANEN SEMUA BULAN) -->
+            <div class="bg-gradient-to-br from-slate-900 to-slate-800 text-white p-5 rounded-2xl shadow-md flex items-center gap-4 sm:col-span-2 lg:col-span-1">
+                <div class="w-12 h-12 rounded-xl bg-white/10 flex items-center justify-center text-xl text-emerald-400 shrink-0">
+                    <i class="fa-solid fa-vault"></i>
+                </div>
+                <div class="overflow-hidden">
+                    <span class="text-[11px] font-semibold text-slate-300 uppercase tracking-wider block">Total Saldo Kas</span>
+                    <h3 class="text-lg font-bold truncate text-white" id="totalSaldoAkumulasi">Rp 0</h3>
+                    <span class="text-[10px] text-slate-400">Total riil semua waktu</span>
+                </div>
+            </div>
+
+            <!-- 2. Pemasukan Bulan Ini (RESET TIAP BULAN) -->
+            <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex items-center gap-4">
+                <div class="w-12 h-12 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center text-xl shrink-0">
+                    <i class="fa-solid fa-arrow-down"></i>
+                </div>
+                <div class="overflow-hidden">
+                    <span class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">Pemasukan Bulan Ini</span>
+                    <h3 class="text-lg font-bold text-emerald-600 truncate" id="totalPemasukanBulan">Rp 0</h3>
+                    <span class="text-[10px] text-slate-400" id="subLabelMasuk">Periode aktif</span>
+                </div>
+            </div>
+
+            <!-- 3. Pengeluaran Bulan Ini (RESET TIAP BULAN) -->
+            <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex items-center gap-4">
+                <div class="w-12 h-12 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center text-xl shrink-0">
+                    <i class="fa-solid fa-arrow-up"></i>
+                </div>
+                <div class="overflow-hidden">
+                    <span class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">Pengeluaran Bulan Ini</span>
+                    <h3 class="text-lg font-bold text-rose-600 truncate" id="totalPengeluaranBulan">Rp 0</h3>
+                    <span class="text-[10px] text-slate-400" id="subLabelKeluar">Periode aktif</span>
+                </div>
+            </div>
+
+            <!-- 4. Arus Kas Bersih Bulan Ini -->
+            <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex items-center gap-4">
+                <div class="w-12 h-12 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center text-xl shrink-0">
+                    <i class="fa-solid fa-chart-line"></i>
+                </div>
+                <div class="overflow-hidden">
+                    <span class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">Arus Kas Bulan Ini</span>
+                    <h3 class="text-lg font-bold text-blue-600 truncate" id="selisihBulan">Rp 0</h3>
+                    <span class="text-[10px] text-slate-400">Selisih bulan ini</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Form Input & Daftar Mutasi -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <!-- Form Input -->
+            <div class="lg:col-span-1 bg-white p-6 rounded-2xl shadow-sm border border-slate-200 h-fit">
+                <h2 class="text-base font-bold text-slate-800 mb-4 flex items-center gap-2">
+                    <i class="fa-solid fa-circle-plus text-emerald-600"></i> Tambah Catatan
+                </h2>
+                <form id="transaksiForm" onsubmit="tambahTransaksi(event)" class="space-y-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">Aksi Transaksi</label>
+                        <div class="grid grid-cols-2 gap-2">
+                            <label class="cursor-pointer">
+                                <input type="radio" name="jenis" value="masuk" checked class="peer sr-only">
+                                <div class="p-2.5 text-center text-sm font-semibold rounded-xl border border-slate-200 peer-checked:border-emerald-500 peer-checked:bg-emerald-50 peer-checked:text-emerald-700 transition-all">
+                                    + Tambah
+                                </div>
+                            </label>
+                            <label class="cursor-pointer">
+                                <input type="radio" name="jenis" value="keluar" class="peer sr-only">
+                                <div class="p-2.5 text-center text-sm font-semibold rounded-xl border border-slate-200 peer-checked:border-rose-500 peer-checked:bg-rose-50 peer-checked:text-rose-700 transition-all">
+                                    - Kurang
+                                </div>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">Nominal (Rp)</label>
+                        <input type="number" id="nominal" required min="1" placeholder="50000" class="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">Keterangan / Catatan</label>
+                        <input type="text" id="keterangan" required placeholder="Gaji, belanja, makan..." class="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">Tanggal</label>
+                        <input type="date" id="tanggal" required class="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                    </div>
+
+                    <button type="submit" id="btnSimpan" class="w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-sm font-semibold transition shadow">
+                        Simpan ke Cloud
+                    </button>
+                </form>
+            </div>
+
+            <!-- Mutasi Transaksi Bulan Ini -->
+            <div class="lg:col-span-2 bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col justify-between">
+                <div>
+                    <div class="flex justify-between items-center mb-4">
+                        <div>
+                            <h2 class="text-base font-bold text-slate-800 flex items-center gap-2">
+                                <i class="fa-solid fa-list-ul text-slate-500"></i> Mutasi Transaksi Bulan Ini
+                            </h2>
+                            <span class="text-xs text-slate-400">Tersinkronisasi otomatis di semua gadget</span>
+                        </div>
+                        <span id="labelPeriode" class="text-xs font-bold text-emerald-800 bg-emerald-100 px-3 py-1 rounded-full"></span>
+                    </div>
+
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left text-sm">
+                            <thead>
+                                <tr class="border-b border-slate-200 text-xs font-semibold text-slate-400 uppercase">
+                                    <th class="pb-3">Tanggal</th>
+                                    <th class="pb-3">Keterangan</th>
+                                    <th class="pb-3 text-right">Nominal</th>
+                                    <th class="pb-3 text-center">Aksi</th>
+                                </tr>
+                            </thead>
+                            <tbody id="daftarTransaksi" class="divide-y divide-slate-100">
+                                <!-- Data dimuat secara Real-time via Firestore -->
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div id="emptyState" class="hidden text-center py-10">
+                        <i class="fa-regular fa-folder-open text-3xl text-slate-300 mb-2"></i>
+                        <p class="text-sm text-slate-400">Belum ada transaksi di bulan ini.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tabel Rekapitulasi Data Keuangan Setiap Bulan -->
+        <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+            <div class="mb-4">
+                <h2 class="text-base font-bold text-slate-800 flex items-center gap-2">
+                    <i class="fa-solid fa-calendar-days text-indigo-600"></i> Rekap Data Keuangan Tiap Bulan
+                </h2>
+                <p class="text-xs text-slate-500">Data riwayat bulanan yang tersimpan di cloud database</p>
+            </div>
+
+            <div class="overflow-x-auto">
+                <table class="w-full text-left text-sm">
+                    <thead>
+                        <tr class="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-500 uppercase">
+                            <th class="py-3 px-4">Bulan / Periode</th>
+                            <th class="py-3 px-4 text-right">Pemasukan</th>
+                            <th class="py-3 px-4 text-right">Pengeluaran</th>
+                            <th class="py-3 px-4 text-right">Hasil Bersih</th>
+                            <th class="py-3 px-4 text-center">Aksi</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tabelRekapBulanan" class="divide-y divide-slate-100">
+                        <!-- Dimuat otomatis via Javascript -->
+                    </tbody>
+                </table>
+            </div>
+            <div id="emptyRekap" class="hidden text-center py-6 text-sm text-slate-400">
+                Belum ada data keuangan yang tercatat.
+            </div>
+        </div>
+    </div>
+
+    <!-- SCRIPT LOGIKA DATABASE CLOUD -->
+    <script>
+        // ==============================================================
+        // TEMPELKAN KODE KONFIGURASI FIREBASE ANDA DI SINI
+        // ==============================================================
+        const firebaseConfig = {
+  apiKey: "AIzaSyCfiNMn6gTLMjrC_3v96JD42kkGWDdUXEI",
+  authDomain: "keuangan-c417d.firebaseapp.com",
+  databaseURL: "https://keuangan-c417d-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "keuangan-c417d",
+  storageBucket: "keuangan-c417d.firebasestorage.app",
+  messagingSenderId: "307710514258",
+  appId: "1:307710514258:web:7be09256d3ac1ffb763b8b",
+  measurementId: "G-S7JL8FDM4M"
+};
+        // ==============================================================
+
+        // Inisialisasi Firebase & Firestore Database
+        let db;
+        try {
+            firebase.initializeApp(firebaseConfig);
+            db = firebase.firestore();
+        } catch (err) {
+            console.error("Firebase config belum diisi dengan benar!", err);
+            document.getElementById('statusDb').innerText = "Konfigurasi Firebase belum diisi!";
+            document.getElementById('statusDb').className = "text-xs text-rose-500 font-semibold";
+        }
+
+        // Variabel penampung data lokal yang tersinkronisasi
+        let cachedData = [];
+
+        // Set tanggal default ke hari ini
+        const now = new Date();
+        const curY = now.getFullYear();
+        const curM = String(now.getMonth() + 1).padStart(2, '0');
+        const curD = String(now.getDate()).padStart(2, '0');
+
+        document.getElementById('filterBulan').value = `${curY}-${curM}`;
+        document.getElementById('tanggal').value = `${curY}-${curM}-${curD}`;
+
+        // Format angka Rupiah
+        function formatRupiah(num) {
+            return new Intl.NumberFormat('id-ID', {
+                style: 'currency',
+                currency: 'IDR',
+                minimumFractionDigits: 0
+            }).format(num);
+        }
+
+        // 1. DENGARKAN PERUBAHAN DATABASE SECARA REAL-TIME (Sinkronisasi Multi-Device)
+        if (db) {
+            db.collection("keuangan_transaksi")
+              .onSnapshot((snapshot) => {
+                  cachedData = [];
+                  snapshot.forEach((doc) => {
+                      cachedData.push({
+                          id: doc.id,
+                          ...doc.data()
+                      });
+                  });
+                  renderApp();
+              }, (error) => {
+                  console.error("Gagal menyinkronkan data:", error);
+              });
+        }
+
+        // 2. SIMPAN TRANSAKSI KE DATABASE CLOUD
+        async function tambahTransaksi(e) {
+            e.preventDefault();
+
+            if (!db) {
+                alert("Harap masukkan firebaseConfig Anda terlebih dahulu di dalam kode file HTML!");
+                return;
+            }
+
+            const btn = document.getElementById('btnSimpan');
+            btn.disabled = true;
+            btn.innerText = "Menyimpan...";
+
+            const jenis = document.querySelector('input[name="jenis"]:checked').value;
+            const nominal = parseFloat(document.getElementById('nominal').value);
+            const keterangan = document.getElementById('keterangan').value.trim();
+            const tanggal = document.getElementById('tanggal').value;
+
+            try {
+                // Menambahkan data permanen ke Firestore Cloud
+                await db.collection("keuangan_transaksi").add({
+                    jenis: jenis,
+                    nominal: nominal,
+                    keterangan: keterangan,
+                    tanggal: tanggal,
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
+
+                // Reset form
+                document.getElementById('nominal').value = '';
+                document.getElementById('keterangan').value = '';
+                document.getElementById('filterBulan').value = tanggal.substring(0, 7);
+            } catch (error) {
+                alert("Gagal menyimpan data ke cloud: " + error.message);
+            } finally {
+                btn.disabled = false;
+                btn.innerText = "Simpan ke Cloud";
+            }
+        }
+
+        // 3. HAPUS DATA DARI DATABASE CLOUD
+        async function hapusTransaksi(docId) {
+            if (confirm("Hapus catatan ini dari database cloud permanen?")) {
+                try {
+                    await db.collection("keuangan_transaksi").doc(docId).delete();
+                } catch (error) {
+                    alert("Gagal menghapus data: " + error.message);
+                }
+            }
+        }
+
+        function pilihBulan(periodeKey) {
+            document.getElementById('filterBulan').value = periodeKey;
+            renderApp();
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        // 4. KALKULASI & TAMPILAN
+        function renderApp() {
+            const filterBulan = document.getElementById('filterBulan').value;
+
+            // A. SALDO TOTAL KESELURUHAN (TIDAK RESET / PERMANEN SEMUA BULAN)
+            let totalMasukSemua = 0;
+            let totalKeluarSemua = 0;
+
+            cachedData.forEach(item => {
+                if (item.jenis === 'masuk') totalMasukSemua += item.nominal;
+                if (item.jenis === 'keluar') totalKeluarSemua += item.nominal;
+            });
+
+            const grandTotalSaldo = totalMasukSemua - totalKeluarSemua;
+            document.getElementById('totalSaldoAkumulasi').innerText = formatRupiah(grandTotalSaldo);
+
+            // B. FILTER KHUSUS BULAN INI (RESET OTOMATIS TIAP BULAN)
+            const transaksiBulanIni = cachedData.filter(item => item.tanggal && item.tanggal.startsWith(filterBulan));
+            transaksiBulanIni.sort((a, b) => new Date(b.tanggal) - new Date(a.tanggal));
+
+            let masukBulan = 0;
+            let keluarBulan = 0;
+
+            transaksiBulanIni.forEach(item => {
+                if (item.jenis === 'masuk') masukBulan += item.nominal;
+                if (item.jenis === 'keluar') keluarBulan += item.nominal;
+            });
+
+            const selisihBulan = masukBulan - keluarBulan;
+
+            document.getElementById('totalPemasukanBulan').innerText = formatRupiah(masukBulan);
+            document.getElementById('totalPengeluaranBulan').innerText = formatRupiah(keluarBulan);
+            
+            const selisihEl = document.getElementById('selisihBulan');
+            selisihEl.innerText = formatRupiah(selisihBulan);
+            selisihEl.className = `text-lg font-bold truncate ${selisihBulan >= 0 ? 'text-blue-600' : 'text-rose-600'}`;
+
+            const [thn, bln] = filterBulan.split('-');
+            const namaBulanTeks = new Date(thn, bln - 1).toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
+            document.getElementById('labelPeriode').innerText = namaBulanTeks;
+            document.getElementById('subLabelMasuk').innerText = namaBulanTeks;
+            document.getElementById('subLabelKeluar').innerText = namaBulanTeks;
+
+            // C. RENDER DAFTAR MUTASI BULAN INI
+            const tbody = document.getElementById('daftarTransaksi');
+            const emptyState = document.getElementById('emptyState');
+            tbody.innerHTML = '';
+
+            if (transaksiBulanIni.length === 0) {
+                emptyState.classList.remove('hidden');
+            } else {
+                emptyState.classList.add('hidden');
+                transaksiBulanIni.forEach(item => {
+                    const isMasuk = item.jenis === 'masuk';
+                    const tr = document.createElement('tr');
+                    tr.className = 'hover:bg-slate-50 transition';
+
+                    tr.innerHTML = `
+                        <td class="py-3 text-slate-500 text-xs">${item.tanggal}</td>
+                        <td class="py-3 font-medium text-slate-800">
+                            ${item.keterangan}
+                            <span class="inline-block sm:hidden text-[10px] px-1.5 py-0.5 rounded ${isMasuk ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}">
+                                ${isMasuk ? 'Masuk' : 'Keluar'}
+                            </span>
+                        </td>
+                        <td class="py-3 text-right font-semibold ${isMasuk ? 'text-emerald-600' : 'text-rose-600'}">
+                            ${isMasuk ? '+' : '-'} ${formatRupiah(item.nominal)}
+                        </td>
+                        <td class="py-3 text-center">
+                            <button onclick="hapusTransaksi('${item.id}')" class="text-slate-400 hover:text-rose-600 p-1 transition" title="Hapus">
+                                <i class="fa-regular fa-trash-can"></i>
+                            </button>
+                        </td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            }
+
+            // D. RENDER REKAP DATA BULANAN
+            renderRekapBulanan(cachedData, filterBulan);
+        }
+
+        // Fungsi Rangkuman Setiap Bulan
+        function renderRekapBulanan(dataList, activeBulan) {
+            const rekapBody = document.getElementById('tabelRekapBulanan');
+            const emptyRekap = document.getElementById('emptyRekap');
+            rekapBody.innerHTML = '';
+
+            if (dataList.length === 0) {
+                emptyRekap.classList.remove('hidden');
+                return;
+            }
+            emptyRekap.classList.add('hidden');
+
+            const mapBulan = {};
+            dataList.forEach(item => {
+                if (!item.tanggal) return;
+                const periode = item.tanggal.substring(0, 7);
+                if (!mapBulan[periode]) {
+                    mapBulan[periode] = { masuk: 0, keluar: 0 };
+                }
+                if (item.jenis === 'masuk') mapBulan[periode].masuk += item.nominal;
+                if (item.jenis === 'keluar') mapBulan[periode].keluar += item.nominal;
+            });
+
+            const sortedBulan = Object.keys(mapBulan).sort((a, b) => b.localeCompare(a));
+
+            sortedBulan.forEach(periode => {
+                const data = mapBulan[periode];
+                const selisih = data.masuk - data.keluar;
+
+                const [t, b] = periode.split('-');
+                const labelBulan = new Date(t, b - 1).toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
+                const isSelected = periode === activeBulan;
+
+                const tr = document.createElement('tr');
+                tr.className = `hover:bg-slate-50 transition ${isSelected ? 'bg-emerald-50/60 font-semibold' : ''}`;
+
+                tr.innerHTML = `
+                    <td class="py-3 px-4 text-slate-800 flex items-center gap-2">
+                        ${labelBulan}
+                        ${isSelected ? '<span class="text-[10px] bg-emerald-600 text-white px-2 py-0.5 rounded-full">Aktif</span>' : ''}
+                    </td>
+                    <td class="py-3 px-4 text-right text-emerald-600 font-medium">
+                        ${formatRupiah(data.masuk)}
+                    </td>
+                    <td class="py-3 px-4 text-right text-rose-600 font-medium">
+                        ${formatRupiah(data.keluar)}
+                    </td>
+                    <td class="py-3 px-4 text-right font-semibold ${selisih >= 0 ? 'text-blue-600' : 'text-rose-600'}">
+                        ${formatRupiah(selisih)}
+                    </td>
+                    <td class="py-3 px-4 text-center">
+                        <button onclick="pilihBulan('${periode}')" class="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 px-2.5 py-1 rounded-lg border border-slate-300 transition">
+                            Lihat Mutasi
+                        </button>
+                    </td>
+                `;
+                rekapBody.appendChild(tr);
+            });
+        }
+    </script>
+</body>
+</html>
